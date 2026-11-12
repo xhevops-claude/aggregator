@@ -14,5 +14,6 @@ public sealed record RunItem
     public string? ErrorClass { get; init; }
     public string? ErrorText { get; init; }
     public string? LakeKey { get; init; }
+    public List<string> LakeKeys { get; init; } = [];
     public List<Guid> EntityIds { get; init; } = [];
 }

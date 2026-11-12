@@ -145,7 +145,7 @@ apples, and leave.
 
 ```
                       ┌─────────────────────────────────────────────────┐
-  schedule / CLI ───▶ │ Conductor   run = job × strategy × project      │
+  schedule / Api ───▶ │ Conductor   run = job × strategy × project      │
                       │ dispatches commands, counts items, applies      │
                       │ retry budget, pauses for decisions              │
                       └──────┬──────────────────────┬───────────────────┘
@@ -213,7 +213,7 @@ A run keeps a live record, updated on every message:
 - **run event**: an append-only log; every state change and every
   administrator decision.
 
-Progress for the CLI, the API or a page is a query over run items, never a
+Progress for the API and the dashboards is a query over run items, never a
 counter.
 
 ### Strategy: how a run executes
@@ -249,7 +249,7 @@ it.
   tripped, goes to **waiting for decision** and the run pauses there. The
   system never marks anything failed on its own.
 - An administrator decides: retry on another node, retry later, skip these
-  items, abort the run, quarantine the provider. CLI first, a page later.
+  items, abort the run, quarantine the provider. Through the Api.
   Every decision is a run event.
 
 ### Harvester
@@ -370,9 +370,9 @@ Commands built 2026-11-12: `nbshop.sitemap`, `nbshop.listing-pages`,
 
 ### Store writer
 
-- Input: an `entity.adapted` signal `{ projectId, stagingId }`. No consumer
-  runs yet: CLI `apply` reads `pending` staging documents in harvest order
-  (entity `harvestedAt`, then `adaptedAt`).
+- Input: an `entity.adapted` signal `{ projectId, stagingId }`. Pending
+  staging documents are applied in harvest order (entity `harvestedAt`,
+  then `adaptedAt`).
 - Does, in one MongoDB transaction per staging document:
   - reads the staging document;
   - matches it inside the project:
@@ -504,7 +504,7 @@ RabbitMQ, one queue per consumer:
   `<prefix>.dead` to `<queue>.dead`.
 - Messages are persistent JSON, published with confirms; headers carry
   `projectId`, `runId`, `itemId`.
-- `collector mq init` declares it all; `COLLECTOR_RABBIT` overrides the URI.
+- The topology is declared idempotently; `COLLECTOR_RABBIT` overrides the URI.
 
 Messages are signals and stay small: no page body ever travels over
 RabbitMQ, so there is no message size cap to manage (decided 2026-11-12).
@@ -535,7 +535,6 @@ src/Collector.Storing/              store writer: staging reads, matching, merge
 src/Collector.Providers.Nbshop/     NBSHOP harvest commands, nbshop.shoes adapter
 src/Collector.Providers.SportM/     Sport M harvest commands, sportm.shoes adapter
 src/Collector.Conducting/           conductor: runs, items, retry budget, decisions (empty so far)
-src/Collector.Cli/                  dev CLI: db init, mq init, seed, harvest, adapt, apply, stats
 src/Collector.Workers/              not created yet: one host, its role is configuration
 src/Collector.Node/                 not created yet: the external node over HTTPS
 src/Collector.Api/                  not created yet: project-scoped reads, decisions, work API
@@ -559,11 +558,11 @@ messages, `MongoDB.Driver`, `RabbitMQ.Client`, xUnit. HTTP is our own
    three retention modes; `lake.item.stored` from the harvester; the
    RabbitMQ topology.
 3. Conductor: jobs and strategies as data, runs with commands, items and
-   events, retry budget, waiting for decision; CLI `run` and `decide`.
+   events, retry budget, waiting for decision; start and decide through the Api.
    Not started: `Collector.Conducting` is empty.
 4. **In part, 2026-11-12.** Shoes adapters on both platforms into staging
    and the store writer with brand + `sku` matching are built. `discover`
-   and `details` run end to end through the dev CLI, stage by stage,
+   and `details` run end to end, stage by stage,
    without the conductor. Open: through the conductor; discovery by title
    text.
 5. `stock` job with spread pacing; schedule; `live-check` job on the

@@ -149,12 +149,14 @@ public sealed class HarvestRunner
 
     private static ItemCompleted Completed(HarvestCommand message, HarvestReport report)
     {
+        var keys = report.Stored.Concat(report.Unchanged).Select(item => item.Key).Distinct().ToList();
         var completed = new ItemCompleted
         {
             ProjectId = message.ProjectId,
             RunId = message.RunId,
             ItemId = message.ItemId,
             State = RunItemState.Done,
+            LakeKeys = keys,
         };
         if (report.Succeeded) return completed;
 

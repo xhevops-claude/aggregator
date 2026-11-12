@@ -17,6 +17,7 @@ public static class TopologySetup
         new(QueueNames.AdapterAdaptCommand, MessageNames.AdaptCommand, DefaultPrefetch),
         new(QueueNames.StoreWriterEntityAdapted, MessageNames.EntityAdapted, DefaultPrefetch),
         new(QueueNames.ConductorItemCompleted, MessageNames.ItemCompleted, DefaultPrefetch),
+        new(QueueNames.ConductorRunRequested, MessageNames.RunRequested, DefaultPrefetch),
     ];
 
     public static ushort PrefetchFor(string queue)

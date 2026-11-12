@@ -117,6 +117,24 @@ public class HarvestRunnerTests
         Assert.Equal([MessageNames.ItemCompleted], publisher.Names);
         var completed = Assert.Single(publisher.Of<ItemCompleted>(MessageNames.ItemCompleted));
         Assert.Equal(RunItemState.Done, completed.State);
+        Assert.Equal(report.Unchanged.Select(item => item.Key), completed.LakeKeys);
+    }
+
+    [Fact]
+    public async Task The_completion_names_every_stored_and_unchanged_key_once()
+    {
+        var command = new ScriptedCommand(CommandName, [Item("p1", "one"), Item("p2", "two")]);
+        var runner = Runner(command);
+        await runner.RunAsync(Message(), Source(), LakeRetention.ChangesOnly, default);
+        publisher.Published.Clear();
+        var changed = Runner(new ScriptedCommand(CommandName, [Item("p1", "one"), Item("p2", "new")]));
+
+        var report = await changed.RunAsync(Message(), Source(), LakeRetention.ChangesOnly, default);
+
+        var completed = Assert.Single(publisher.Of<ItemCompleted>(MessageNames.ItemCompleted));
+        var expected = report.Stored.Concat(report.Unchanged).Select(item => item.Key).Order();
+        Assert.Equal(expected, completed.LakeKeys.Order());
+        Assert.Equal(2, completed.LakeKeys.Count);
     }
 
     [Fact]

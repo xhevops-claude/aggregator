@@ -7,4 +7,5 @@ public static class MessageNames
     public const string AdaptCommand = "adapt.command";
     public const string EntityAdapted = "entity.adapted";
     public const string ItemCompleted = "item.completed";
+    public const string RunRequested = "run.requested";
 }

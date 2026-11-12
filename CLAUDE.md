@@ -70,6 +70,14 @@ Rules
 - Record new site findings in `docs/research/<site>.md` and update
   `docs/research/sources.md` and `docs/RESUME-HERE.md` when state changes.
 
+Working with the owner
+- Claude builds, runs and verifies every step, then shows the observed
+  result.
+- Run and verify through the real pipeline: messages on RabbitMQ, the
+  workers, the conductor, the Api and the dashboards.
+- Before each step, tell the owner when it needs a different model, a
+  different effort level, ultracode or ultrathink.
+
 Repo and local rig
 - One repo for now. Later the Collector moves to its own GitHub
   organization, split into one repo per service.

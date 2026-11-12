@@ -39,6 +39,23 @@ services:
       retries: 20
       start_period: 10s
 
+  workers:
+    build:
+      context: ..
+      dockerfile: src/Collector.Workers/Dockerfile
+    environment:
+      COLLECTOR_ROLES: conductor,harvester,adapter,store-writer
+      COLLECTOR_MONGO: mongodb://mongo:27117/?directConnection=true
+      COLLECTOR_RABBIT: amqp://collector:collector@rabbitmq:5672/
+      COLLECTOR_LAKE: /lake
+    volumes:
+      - ../.lake:/lake
+    depends_on:
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
 volumes:
   mongo-data:
   rabbitmq-data:

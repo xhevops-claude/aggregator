@@ -10,4 +10,5 @@ public sealed record ItemCompleted : IMessage
     public RunItemState State { get; init; }
     public string? ErrorClass { get; init; }
     public string? ErrorText { get; init; }
+    public List<string> LakeKeys { get; init; } = [];
 }

@@ -8,4 +8,5 @@ public static class QueueNames
     public const string AdapterAdaptCommand = "adapter.adapt-command";
     public const string StoreWriterEntityAdapted = "store-writer.entity-adapted";
     public const string ConductorItemCompleted = "conductor.item-completed";
+    public const string ConductorRunRequested = "conductor.run-requested";
 }

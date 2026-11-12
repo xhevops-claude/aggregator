@@ -1,0 +1,6 @@
+**/bin/
+**/obj/
+.lake/
+.git/
+.vs/
+**/TestResults/

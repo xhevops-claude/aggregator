@@ -35,8 +35,6 @@ Last updated 2026-11-12 on the owner's box (local session).
     `nbshop.product-page`, `nbshop.shoes`.
   - `Providers.SportM`: `sportm.catalog-pages`, `sportm.product-page`,
     `sportm.shoes`.
-  - `Cli`: `db init`, `mq init`, `seed`, `harvest`, `adapt`, `apply`,
-    `stats` (README § Dev CLI).
 - **Tests**: 507, one test project per library and provider. The
   Lake, Messaging and Storing tests need the rig.
 - **Live end-to-end run on the rig** (project `mk-shoes`, adidas shoes):
@@ -55,13 +53,11 @@ Last updated 2026-11-12 on the owner's box (local session).
     product page, and applying in any order gives the same documents;
   - `anyListingInStock` is unknown (null) when no listing was
     stock-checked. Live: 6 true, 32 unknown, 0 false;
-  - CLI: `--from-store` no longer re-picks pages already harvested (use
-    `--retry`), run records end `WaitingForDecision` on failures and
-    `Aborted` on Ctrl+C or errors, `apply` counts each failure once;
-  - a second review of those fixes (03:05) found two more, fixed at once:
-    entities now carry the last observation time (`checkedAt`) as
-    `harvestedAt`, so a re-checked page is not "older" than a tile; a bad
-    `--limit` is a usage error, and `harvest` exits 3 when items failed;
+  - run records end `WaitingForDecision` on failures and `Aborted` on
+    errors;
+  - a second review of those fixes (03:05): entities now carry the last
+    observation time (`checkedAt`) as `harvestedAt`, so a re-checked page
+    is not "older" than a tile;
   - the last high finding, fixed at 03:15 behind a backup and checked by
     a skeptic over 13 scenarios: a corrected `sku` is now
     order-independent (alias claim times, ARCHITECTURE.md § Store writer).
@@ -71,7 +67,7 @@ Last updated 2026-11-12 on the owner's box (local session).
   with the final code at 03:17; the lake itself was kept.
 - **Not built yet**: the conductor (`Conducting` is empty), `Workers`,
   `Api`, `Node`. Each host joins the rig when it gets real code.
-- **Nothing consumes the queues yet**: the CLI's signals pile up in the
+- **Nothing consumes the queues yet**: the night run's signals sit in the
   rig's queues. Harmless; purge them or let the first workers drain them.
 - **Five Macedonian sportswear shops on two platforms are researched and
   verified with live crawls.** Their harvest and parse rules are written
@@ -97,21 +93,10 @@ Last updated 2026-11-12 on the owner's box (local session).
 wsl docker compose -f rig/compose.yaml up
 dotnet build
 dotnet test
-dotnet run --project src/Collector.Cli -- db init
-dotnet run --project src/Collector.Cli -- mq init
-dotnet run --project src/Collector.Cli -- seed
 ```
 
 The repo has its own `nuget.config` with nuget.org only, so restores never
-reach for a work feed. The dev CLI walk-through is in README § Dev CLI.
-
-Planned with the conductor (step 3):
-
-```bash
-dotnet run --project src/Collector.Cli -- run clothing/shoes/sportm sportm.discover --strategy dev --brand adidas --limit 5
-dotnet run --project src/Collector.Cli -- runs
-dotnet run --project src/Collector.Cli -- decide <run> retry-elsewhere
-```
+reach for a work feed.
 
 ## Sources
 
@@ -157,9 +142,9 @@ site), `buzz.mk` (parked), `intersport.com.mk` / `sportm.com.mk`
   with the conductor: an outbox, or unchanged keys on the run item.
 - **Unchanged pages send no signal** under changes-only: ARCHITECTURE.md
   § Open decisions.
-- **CLI `adapt` without `--key`** re-adapts every latest lake item of the
-  source under a new run id, so staging grows with every adapt. The
-  conductor will pass the keys of its own harvest.
+- **An adapt command with no lake keys** re-adapts every latest lake item
+  of the source under a new run id, so staging grows with every adapt.
+  The conductor will pass the keys of its own harvest.
 - **Sport M sizes** are stored without a size system (the shop's own, UK
   for adidas); the EU size on the same element is dropped.
 - **Sport Vision listing-page tiles** keep only title and URL: the tile's

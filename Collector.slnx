@@ -11,8 +11,10 @@
     <Project Path="src/Collector.Providers.Nbshop/Collector.Providers.Nbshop.csproj" />
     <Project Path="src/Collector.Providers.SportM/Collector.Providers.SportM.csproj" />
     <Project Path="src/Collector.Storing/Collector.Storing.csproj" />
+    <Project Path="src/Collector.Workers/Collector.Workers.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Collector.Conducting.Tests/Collector.Conducting.Tests.csproj" />
     <Project Path="tests/Collector.Harvesting.Tests/Collector.Harvesting.Tests.csproj" />
     <Project Path="tests/Collector.Lake.Tests/Collector.Lake.Tests.csproj" />
     <Project Path="tests/Collector.Messaging.Tests/Collector.Messaging.Tests.csproj" />
