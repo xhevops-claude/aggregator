@@ -40,3 +40,24 @@ Verified parse of a live page, `/mk/dukser/181711-under-armour-icon-fleece-hoodi
 | old price | none |
 | availability | `InStock` |
 | images | 3 URLs |
+
+## Findings 2026-11-12
+
+Live, polite, while building the NBSHOP harvest commands and Shoes adapter.
+
+- Product sitemap: 5,581 URLs; 2,142 in shoe categories. Only shop with
+  `baletanki` (2). Counts per slug in [nbshop-platform.md](nbshop-platform.md).
+- Outlet listing `/mk/proizvodi/?outlet=yes`: 28 pages of 24 tiles.
+  - The next link is `/mk/proizvodi/?outlet=yes/page-2`: `/page-N` goes after the query.
+  - Page 1 is all `papuci`.
+- Manufacturer code label is Serbian: "Šifra proizvođača" in `div.product-model`.
+- Sizes are listed out of order (`5`, `9-`, `9`, `8-`, …). Available sizes carry EAN-13s.
+- Saved as test samples (gzipped, `tests/Collector.Providers.Nbshop.Tests/Samples/`):
+  - outlet listing page 1;
+  - `/mk/patiki/181427-adidas-vs-pace-2-0`: 3,288 MKD, not discounted, sku `HP6005`,
+    model code `LSH59`, 10 of 20 sizes in stock;
+  - `/mk/dukser/181711-under-armour-icon-fleece-hoodie`: the non-shoe page,
+    ignored by the Shoes adapter.
+- The hidden old-price block of a non-discounted page holds the current price (3.288).
+- 30 old products keep 3- or 4-digit ids, e.g. `/mk/corapi/9446-slazenger-trainer`;
+  one of them is in `patiki`. The sitemap finds them; listing tiles skip them.

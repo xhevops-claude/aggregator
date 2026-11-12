@@ -1,6 +1,8 @@
 # Stock ingestion sources — overview
 
-Status as of 2026-10-27. "Stock ingestion" = we read each shop's live
+Status as of 2026-11-12: NBSHOP and Sport M harvest commands and Shoes
+adapters are built (`src/Collector.Providers.*`); D Sport is still
+blocked. "Stock ingestion" = we read each shop's live
 catalog for price, discount and availability; "catalog ingestion" (official
 brand sources for canonical product data) is a separate, later track.
 
@@ -29,8 +31,9 @@ which is what the official catalogs key on:
 Sport Vision additionally exposes an EAN-13 per size
 (`data-combination-code`), i.e. the GTIN level below the article code.
 
-Brand name casing differs by shop ("adidas" on NBSHOP, "Adidas" on Sport M);
-compare case-insensitively.
+Brand name casing differs by shop ("adidas" on NBSHOP, "Adidas" on Sport M).
+The store writer lowercases the brand when matching; the first stored
+spelling is kept.
 
 ## Platform families
 

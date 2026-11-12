@@ -1,6 +1,6 @@
 # Resume here
 
-Last updated 2026-11-11 on the owner's box (local session).
+Last updated 2026-11-12 on the owner's box (local session).
 
 ## Where things stand, in one minute
 
@@ -13,8 +13,66 @@ Last updated 2026-11-11 on the owner's box (local session).
   adapters produce Products and Listings of the operation's domain with
   deterministic ids; the operation owns the model and harvests only what
   it needs (the apples rule); projects are hard partitions. All of it,
-  with the vocabulary, in [ARCHITECTURE.md](ARCHITECTURE.md). Nothing of
-  it is built yet.
+  with the vocabulary, in [ARCHITECTURE.md](ARCHITECTURE.md).
+- **Night session 2026-11-12, 01:20 to 03:45: build steps 1 and 2 done,
+  step 4 in part. Nothing is committed: review the diff, then commit.**
+- **Step 1**: solution, `Core` (entities, Shoes domain, UUIDv5 ids,
+  platform records, runs, lake, staging, messages), `Data` (conventions,
+  class maps, typed collections, 24 indexes), `rig/compose.yaml` (MongoDB
+  8.0 single-node replica set, RabbitMQ 4.1).
+- **Step 2 and most of step 4**, built by parallel agents, each reviewed
+  adversarially and fixed:
+  - `Harvesting`: `PoliteFetcher` (per-host floor, robots, retries,
+    Retry-After), `PacedFetcher` (strategy pacing), `HarvestRunner`.
+  - `Lake`: gzip bodies under `.lake/`, `lakeItems` index, three retention
+    modes, `checkedAt` on unchanged pages.
+  - `Messaging`: raw `RabbitMQ.Client` topology, publisher with confirms,
+    consumer with delayed retries and dead letters.
+  - `Adapting`: adapter catalog, `AdaptRunner` (lake → staging).
+  - `Storing`: store writer, brand + `sku` matching with aliases, merge
+    rules by harvest time, tri-state `anyListingInStock`.
+  - `Providers.Nbshop`: `nbshop.sitemap`, `nbshop.listing-pages`,
+    `nbshop.product-page`, `nbshop.shoes`.
+  - `Providers.SportM`: `sportm.catalog-pages`, `sportm.product-page`,
+    `sportm.shoes`.
+  - `Cli`: `db init`, `mq init`, `seed`, `harvest`, `adapt`, `apply`,
+    `stats` (README § Dev CLI).
+- **Tests**: 507, one test project per library and provider. The
+  Lake, Messaging and Storing tests need the rig.
+- **Live end-to-end run on the rig** (project `mk-shoes`, adidas shoes):
+  - Sport M, Intersport and Sport Vision: one listing page each, three
+    product pages for Sport M and for Sport Vision.
+  - 38 products, 67 listings, 6 with details (sizes, EANs, old prices).
+  - adidas `JS3036` matched across Sport M and Intersport into one product.
+  - Found live and fixed: a Sport M product page with an empty breadcrumb
+    (`HQ8708`) was dropped; an empty breadcrumb now counts as unknown.
+- **Integration review** (4 lenses, skeptic per finding): 11 confirmed.
+  Fixed and verified the same night:
+  - an unchanged re-harvest now moves `checkedAt`, and with it the
+    listing's `infoCheckedAt` and `stockCheckedAt`. Live: `HQ8708`
+    re-checked at 02:02 UTC, lake still version 1, listing dates moved;
+  - the store writer no longer lets an older tile overwrite a newer
+    product page, and applying in any order gives the same documents;
+  - `anyListingInStock` is unknown (null) when no listing was
+    stock-checked. Live: 6 true, 32 unknown, 0 false;
+  - CLI: `--from-store` no longer re-picks pages already harvested (use
+    `--retry`), run records end `WaitingForDecision` on failures and
+    `Aborted` on Ctrl+C or errors, `apply` counts each failure once;
+  - a second review of those fixes (03:05) found two more, fixed at once:
+    entities now carry the last observation time (`checkedAt`) as
+    `harvestedAt`, so a re-checked page is not "older" than a tile; a bad
+    `--limit` is a usage error, and `harvest` exits 3 when items failed;
+  - the last high finding, fixed at 03:15 behind a backup and checked by
+    a skeptic over 13 scenarios: a corrected `sku` is now
+    order-independent (alias claim times, ARCHITECTURE.md § Store writer).
+    Only a staged entity with no harvest time can still win by order; the
+    pipeline never produces one.
+- The store, listings and staging in the rig were rebuilt from the lake
+  with the final code at 03:17; the lake itself was kept.
+- **Not built yet**: the conductor (`Conducting` is empty), `Workers`,
+  `Api`, `Node`. Each host joins the rig when it gets real code.
+- **Nothing consumes the queues yet**: the CLI's signals pile up in the
+  rig's queues. Harmless; purge them or let the first workers drain them.
 - **Five Macedonian sportswear shops on two platforms are researched and
   verified with live crawls.** Their harvest and parse rules are written
   down in `docs/research/`:
@@ -31,20 +89,29 @@ Last updated 2026-11-11 on the owner's box (local session).
 
 ## Set up locally
 
-.NET SDK 10.0.401 is installed on the box (`dotnet --version`). RabbitMQ
-and MongoDB are not running anywhere yet; they arrive in the compose rig
-with build step 1. Once the solution skeleton
-exists:
+.NET SDK 10.0.401 is installed on the box (`dotnet --version`). Docker
+28 with Compose 2.35 runs in WSL Ubuntu. Rig, ports and logins: README.md
+§ Local rig.
 
 ```bash
+wsl docker compose -f rig/compose.yaml up
 dotnet build
 dotnet test
-dotnet run --project src/Collector.Cli -- run clothing/shoes/sportm sportm.discover --strategy fast --brand adidas --limit 5
-dotnet run --project src/Collector.Cli -- runs                      # progress, per item
-dotnet run --project src/Collector.Cli -- decide <run> retry-elsewhere
+dotnet run --project src/Collector.Cli -- db init
+dotnet run --project src/Collector.Cli -- mq init
+dotnet run --project src/Collector.Cli -- seed
 ```
 
-No tests exist yet.
+The repo has its own `nuget.config` with nuget.org only, so restores never
+reach for a work feed. The dev CLI walk-through is in README § Dev CLI.
+
+Planned with the conductor (step 3):
+
+```bash
+dotnet run --project src/Collector.Cli -- run clothing/shoes/sportm sportm.discover --strategy dev --brand adidas --limit 5
+dotnet run --project src/Collector.Cli -- runs
+dotnet run --project src/Collector.Cli -- decide <run> retry-elsewhere
+```
 
 ## Sources
 
@@ -82,25 +149,49 @@ site), `buzz.mk` (parked), `intersport.com.mk` / `sportm.com.mk`
   with branch.
 - Brand casing differs ("adidas" NBSHOP vs "Adidas" Sport M).
 
+## Known issues from the night review (not fixed yet)
+
+- **Lost signal**: `HarvestRunner` writes the lake, then publishes
+  `lake.item.stored`. If RabbitMQ fails in between, the page is in the lake
+  but the signal is gone, and a changes-only re-run will not resend it. Fix
+  with the conductor: an outbox, or unchanged keys on the run item.
+- **Unchanged pages send no signal** under changes-only: ARCHITECTURE.md
+  § Open decisions.
+- **CLI `adapt` without `--key`** re-adapts every latest lake item of the
+  source under a new run id, so staging grows with every adapt. The
+  conductor will pass the keys of its own harvest.
+- **Sport M sizes** are stored without a size system (the shop's own, UK
+  for adidas); the EU size on the same element is dropped.
+- **Sport Vision listing-page tiles** keep only title and URL: the tile's
+  price is not used, and those listings have no product until their
+  product page is harvested.
+- **Price scale**: JSON-LD prices keep 2 decimals, HTML old prices none.
+- **The store writer publishes no `item.completed` yet.**
+- **Lake touch race** (low): `LakeStore.TouchAsync` moves `checkedAt` on the
+  version it read; a concurrent changes-only writer can add a newer
+  version in between, so the touch lands on a superseded version.
+- **Equal harvest times** (low): two staged entities with the same
+  `harvestedAt` and different values end in apply order.
+
 ## Next steps, in order
 
-1. **Decide the open items** in ARCHITECTURE.md § Open decisions (where
-   it runs, lake body storage, live-check policy).
-2. **Check the two blocked sites from the box's IP**:
+1. **Review and commit the night's work** (nothing is committed).
+2. **Decide the open items** in ARCHITECTURE.md § Open decisions,
+   including how unchanged pages reach the conductor.
+3. **Build order step 3, the conductor**: jobs and strategies as data,
+   runs with commands, items and events, retry budget, waiting for
+   decision; `Workers` as the first host, added to the rig.
+4. **Check the two blocked sites from the box's IP**:
    - `https://www.dsport.mk/media/sitemap/dsport.xml` and whether
      `/amfeed/feed/download` serves a public product feed
      (docs/research/dsport-mk.md has the plan).
    - `https://www.adidas.com/us/vs-pace-2.0-shoes/HP6005.html` resolves
      (confirms article-code URLs); look for a product API/feed.
-3. **Build order step 1**: solution skeleton, `Core` (Entity, ids,
-   message contracts, job and strategy schemas, Shoes domain), `Data`
-   (platform collections, Product, Listing, Category, indexes),
-   RabbitMQ + MongoDB in the compose rig.
-4. Then steps 2 to 8 of the build order in ARCHITECTURE.md.
+5. Then steps 5 to 8 of the build order in ARCHITECTURE.md.
 
 ## Things explicitly not done / not to do
 
-- No PR was opened; no tests written; no CI; no .NET code yet.
+- No CI yet.
 - Do not try to get around Cloudflare/Akamai. Use an allowed node and the
   polite fetcher.
 - The non-MK Sport Vision storefronts are not enabled; their sitemap

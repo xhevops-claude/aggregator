@@ -1,7 +1,8 @@
 # Architecture — the Collector platform
 
-Status: **design agreed in discussion on 2026-10-27 and 2026-10-28**, not
-yet built. Stack: **C# on .NET 10 / ASP.NET Core, RabbitMQ, MongoDB.**
+Status: **design agreed 2026-10-27/28; build steps 1 and 2 done, step 4 in
+part (2026-11-12).** Stack: **C# on .NET 10 / ASP.NET Core, RabbitMQ,
+MongoDB.**
 Site behaviour for the first five shops is specified in `docs/research/`.
 
 Read the vocabulary first. Every later section uses those words and no
@@ -35,9 +36,9 @@ check for the product someone is asking about.
 | **Harvester** | Fetches. Nothing else. Given a command, it fetches with a mechanism (plain HTTP, or a browser that clicks) and writes one raw item per page to the lake. A leaf: it never starts another harvest or an adapt. Not "connector", not "scraper", not "collector". |
 | **Raw item** | One fetched thing: a listing page, a product page, a sitemap, a feed, the JSON a page loaded after a click. Keyed by project, source, kind, provider id; stamped with harvest time. |
 | **Lake** | Where raw items live. Retention per project: full history, changes only, latest only. |
-| **Adapter** | Reads raw items from the lake and converts them into entities of one domain. One per provider × domain. A leaf: it never starts a harvest or another adapt. Re-runnable and idempotent. |
+| **Adapter** | Reads raw items from the lake and converts them into entities of one domain. One per platform × domain: `nbshop.shoes` serves three shops. A leaf: it never starts a harvest or another adapt. Re-runnable and idempotent. |
 | **Staging** | A MongoDB collection of adapted entities waiting for the store writer. |
-| **Store writer** | Reads staging, matches entities inside the project (same `sku` = same product), upserts them into the store. The only writer of products, listings and categories. A leaf. |
+| **Store writer** | Reads staging, matches entities inside the project (same brand + `sku` = same product), upserts them into the store. The only writer of products, listings and categories. A leaf. |
 | **Store** | MongoDB. Entities as documents, plus everything the platform needs to run. One database for all projects. |
 | **Node** | A device that executes harvest commands. Today the box. Later a Raspberry Pi abroad, a laptop, a cloud VM. Declares capabilities (http, browser) and location. |
 
@@ -112,8 +113,9 @@ Rules:
   laptops and under keyboards is one source: one rate floor, one budget
   across both, one quarantine when it blocks a node. What differs per leaf
   is the jobs and the adapter.
-- **The adapter is selected by namespace.** `electronics/laptops/anhoch.mk`
-  maps to the Anhoch laptops adapter. Nothing is guessed from the page.
+- **The adapter is selected by the leaf.** The leaf's source gives the
+  platform, the nearest operation with a domain gives the domain:
+  `sportm` × `shoes` → `sportm.shoes`. Nothing is guessed from the page.
 - **A listing belongs to exactly one namespace.** A keyboard never shows
   up in `laptops`.
 
@@ -172,8 +174,8 @@ leaf `clothing/shoes/sportm`:
 ```yaml
 job: sportm.discover
 commands:
-  - harvest: sportm.listing-pages      # the shoes category only, by brand
-  - adapt:   sportm.listings           # pages → Listing + Product entities, no details yet
+  - harvest: sportm.catalog-pages      # the shoe listings only, optionally by brand
+  - adapt:   sportm.shoes              # tiles → Listing + Product candidates, no details yet
 ```
 
 Other jobs on the same leaf:
@@ -181,19 +183,16 @@ Other jobs on the same leaf:
 ```yaml
 job: sportm.details
 commands:
-  - harvest: sportm.product-detail     # for every Sport M listing with no details, or stale ones
-  - adapt:   sportm.products
+  - harvest: sportm.product-page       # every Sport M listing with no details, or stale ones
+  - adapt:   sportm.shoes
 
-job: sportm.stock
-commands:
-  - harvest: sportm.stock              # for every Sport M listing due for a stock check
-  - adapt:   sportm.stock
-
-job: sportm.live-check                  # parameter: one listing id
-commands:
-  - harvest: sportm.stock
-  - adapt:   sportm.stock
+job: sportm.stock                       # planned: no stock command yet
+job: sportm.live-check                  # planned: parameter one listing id
 ```
+
+Seeded jobs: `nbshop.discover`, `nbshop.sitemap`, `nbshop.details`,
+`sportm.discover`, `sportm.details`. One adapt command per platform ×
+domain.
 
 A command does not receive a list from the previous command. It reads the
 state of the store: "every Sport M listing with no details", "every
@@ -261,17 +260,28 @@ it.
   pacing, on the node the strategy selected.
 - Output: each page is written to the lake through the lake library,
   `{ project, source, kind, providerId, url, harvestedAt, contentType,
-  body }`. After the write, one `lake.item.stored` signal per page. Then
-  `item.completed` to the conductor.
+  body }`.
+  - After a write that made a new version, one `lake.item.stored`.
+  - Then one `item.completed` per command: `Done`, or `Failed` with the
+    first five failed items in the text.
+  - A failed page is a per-item failure; the other pages carry on.
 - Mechanisms: HTTP; a browser for pages that need clicks (sizes per branch,
   forum buttons). A browser harvest is an ordinary command that needs a
   node with a browser, paces slower, and emits whatever the page loaded,
   often the site's own JSON.
 - Does not: parse, normalize, know what a product is, or start anything.
 
-Commands known today, from the site research: NBSHOP sitemap, NBSHOP listing
-walk with filter slugs, NBSHOP product page, Sport M paginated catalog
-with brand codes, Sport M product page. See `docs/research/`.
+Commands built 2026-11-12: `nbshop.sitemap`, `nbshop.listing-pages`,
+`nbshop.product-page`, `sportm.catalog-pages`, `sportm.product-page`.
+
+- Each lives in `Collector.Providers.<Platform>`, listed in its
+  `<Platform>Module.HarvestCommands`.
+- Their rules are in `docs/research/`.
+- HTTP goes through `PoliteFetcher`: one connection per host, a minimum
+  interval per host, robots.txt, 3 attempts on network errors, 5xx and 429
+  with Retry-After honoured.
+- `PacedFetcher` adds the strategy's pacing on top; it can only be slower
+  than the source floor.
 
 ### Nodes and rate limits
 
@@ -292,25 +302,50 @@ with brand codes, Sport M product page. See `docs/research/`.
 
 - Key: `project / source / kind / providerId`; every item carries
   `harvestedAt`.
-- Retention per project: **full history** (every harvest a new version),
-  **changes only** (a new version only when the body hash differs),
-  **latest only** (overwrite).
-- Storage (proposal): bodies compressed on disk or S3-compatible object
-  storage; `lakeItems` index collection in MongoDB (key, version,
-  harvestedAt, hash, size, location). Disk first.
+- Retention per project (`projects.lakeRetention`), versions count from 1
+  per key:
+  - **full history**: every harvest is a new version;
+  - **changes only**: a new version only when the body hash differs from
+    the latest; an unchanged page writes no body, only moves the latest
+    version's `checkedAt` forward, and sends no signal;
+  - **latest only**: the harvest is written as the next version, then
+    every older version is deleted, index row and body.
+- `checkedAt` is the last time the page was seen. Adapters stamp it as
+  every entity's `harvestedAt`, the observation time the store writer
+  compares, and as a detail page listing's `infoCheckedAt` and
+  `stockCheckedAt`. Tiles never set the checked dates.
+- Storage, built 2026-11-12: bodies gzip-compressed on disk, one file per
+  version; `lakeItems` index in MongoDB `{ key, source, kind, providerId,
+  version, url, contentType, harvestedAt, checkedAt, hash, size, location }`.
+  - `hash` = SHA-256 of the uncompressed body; every read checks it.
+  - Root: `COLLECTOR_LAKE`, default `.lake/` next to `Collector.slnx`
+    (git-ignored).
+  - Path: `<projectId>/<source>/<kind>/<providerId>/<version, 6 digits>.gz`.
+  - The provider id becomes a readable prefix plus 16 hex of its SHA-256,
+    so any id is a safe folder name.
+  - The body file is written before its index row; a body with no row is
+    never read.
 - A library, not a service: the harvester and the work API write through
-  it, the adapter reads through it.
-- After a write, the writer publishes `lake.item.stored { project, key,
-  version, hash, size }`.
+  it, the adapter reads through it. It publishes nothing.
+- The harvester publishes `lake.item.stored { projectId, runId, itemId,
+  key, version, hash, size }` after each write that made a new version.
 - Answers queries by key or time for re-runs and later aggregations.
 - Price history, where a project keeps history, is a reader of the lake,
   not a special collection.
 
 ### Adapter
 
-- Input: an `adapt.command` naming the namespace, which selects the
-  adapter, and the lake items to read, either as they land (streaming) or
-  once the harvest command is done (batch), as the strategy says.
+- Input: an `adapt.command { namespace, command, lakeKeys }`, either as
+  items land (streaming) or once the harvest command is done (batch), as
+  the strategy says.
+  - Empty `lakeKeys` = the latest version of every lake item of the leaf's
+    source in the adapter's raw kinds.
+  - Raw items of another source or kind are skipped; entities of another
+    project or namespace are rejected.
+- Selection: one adapter per platform × domain. The leaf's source gives the
+  platform, the nearest operation with a domain gives the domain:
+  `sportm` × `shoes` → `sportm.shoes`. `nbshop.shoes` serves Sport Vision,
+  Sport Reality and Buzz.
 - Does: parses the provider's raw shape, maps it to entities of the
   domain, assigns our ids, keeps provider id and `sku` both, sets
   `infoCheckedAt` or `stockCheckedAt` on the listing.
@@ -335,16 +370,38 @@ with brand codes, Sport M product page. See `docs/research/`.
 
 ### Store writer
 
-- Input: an `entity.adapted` signal `{ projectId, stagingId }`.
-- Does:
+- Input: an `entity.adapted` signal `{ projectId, stagingId }`. No consumer
+  runs yet: CLI `apply` reads `pending` staging documents in harvest order
+  (entity `harvestedAt`, then `adaptedAt`).
+- Does, in one MongoDB transaction per staging document:
   - reads the staging document;
-  - matches it inside the project: a listing joins the product with the
-    same `sku`, and rules cover providers without one;
+  - matches it inside the project:
+    - a product with a brand and a `sku` gets the canonical id
+      `uuid5(projectSeed, "product:<brand, lower case>:<SKU, upper case>")`;
+    - the provider's own product id is kept in the product's `aliases`;
+    - a product without a brand or `sku` keeps its provider id and
+      matches nothing yet;
+    - a listing points at its provider's product id; the store writer
+      resolves it through `aliases`, in whichever order they arrive;
   - upserts products, listings and categories in the store;
-  - recomputes derived fields, such as the product's "any listing in
-    stock";
-  - marks the staging document `applied` or `rejected`.
-- Output: `item.completed` to the conductor.
+  - recomputes the product's `anyListingInStock`;
+  - marks the staging document `applied`, or `rejected` with the reason.
+- Merge rules:
+  - identity fields and `createdAt` are set on insert only;
+  - an empty value never overwrites a stored one;
+  - a staged entity harvested earlier than the stored one only fills
+    fields that are missing, so applying in any order gives the same
+    documents;
+  - `infoCheckedAt` and `stockCheckedAt` only move forward;
+  - each alias carries a claim time (`aliasClaims.<candidateId>`, only
+    moves forward): a provider's product moves to another canonical
+    product, e.g. after a corrected `sku`, only when the staged page is at
+    least as new as the claim. A stale page only fills gaps on the
+    current owner.
+- `anyListingInStock`: true when any listing is in stock, false when at
+  least one listing was stock-checked and none is, otherwise unknown
+  (null).
+- Output: none yet; `item.completed` arrives with the conductor.
 - The only component that writes products, listings and categories.
 - A leaf like the others: it never starts a harvest, an adapt or a run.
 
@@ -362,7 +419,8 @@ project id.
 Entity:   id, projectId, namespace, provider, providerId, kind, sourceUrl,
           harvestedAt, createdAt, updatedAt
 
-Product:  Entity + name, brand, sku, categoryId, images, domain fields
+Product:  Entity + name, brand, sku, categoryId, images, aliases,
+          anyListingInStock, domain fields
 Listing:  Entity + productId, title, description, price, oldPrice, currency,
           availability, sizes[] (label, system, ean, inStock, branch),
           url, refreshInterval, infoCheckedAt, stockCheckedAt
@@ -375,16 +433,17 @@ Electronics, CarParts (later): their own.
 The dates live on the listing because stock at one shop and stock at
 another are checked by different runs at different times. The product
 carries a derived "any listing in stock". Matching listings into one
-product happens inside a project, in the store writer, on `sku` where
-providers expose it and by rules where they do not. `refreshInterval` is a generic field on every
-listing so a job can select "due for a check"; nothing in it is specific to
-a domain.
+product happens inside a project, in the store writer, on brand + `sku`.
+Providers without a `sku` are not matched yet. `refreshInterval` is a
+generic field on every listing so a job can select "due for a check";
+nothing in it is specific to a domain.
 
 ### Store
 
 MongoDB, chosen 2026-11-12. One database, `projectId` on every document,
 including sources, jobs, strategies, runs and the lake index. Every index
-starts with `projectId`. Export, archive and delete of a project are
+starts with `projectId`, except the unique project name on `projects`,
+whose `_id` is the project id. Export, archive and delete of a project are
 "everything where projectId = X".
 
 - Our deterministic id is the document `_id`.
@@ -418,23 +477,34 @@ is a per-project policy, decided per tenant later.
 
 A brand's own catalog (adidas first, Nike second) is another provider
 with its own commands and adapter into the same domain. Its output is
-products and listings like any other; matching to shop listings on `sku`
+products and listings like any other; matching to shop listings on brand + `sku`
 is in-project work that comes after the pipeline runs end to end.
 
 ## Messaging
 
-RabbitMQ, one queue per arrow:
+RabbitMQ, one queue per consumer:
 
-| Message | Producer | Consumer |
+| Message | Producer | Queues (consumer) |
 |---|---|---|
-| `harvest.command` | Conductor | Harvester on a node (or the work API for external nodes) |
-| `lake.item.stored` | Harvester (or the work API for external nodes) | Conductor (counting), Adapter in streaming mode |
-| `adapt.command` | Conductor | Adapter |
-| `entity.adapted` | Adapter | Store writer |
-| `item.completed` | Harvester, Adapter, Store writer | Conductor |
+| `harvest.command` | Conductor | `harvester.harvest-command` (priority, max 10, prefetch 1) |
+| `lake.item.stored` | Harvester (or the work API) | `conductor.lake-item-stored`, `adapter.lake-item-stored` |
+| `adapt.command` | Conductor | `adapter.adapt-command` |
+| `entity.adapted` | Adapter | `store-writer.entity-adapted` |
+| `item.completed` | Harvester, Adapter (store writer: not yet) | `conductor.item-completed` |
 
-A priority queue for live checks. Retries with backoff and a dead-letter
-queue per consumer.
+- One durable topic exchange named by the prefix (`collector`); the
+  routing key is the message name.
+- Queue names are `<prefix>.<queue>`.
+- Live checks share the harvest queue and jump it with a higher message
+  priority. Prefetch 1 there, so priority works; 16 on the other queues.
+- Every queue has `<queue>.retry` and `<queue>.dead`.
+- A failed message waits in `.retry` (per-message TTL) and comes back:
+  1 s, doubling, at most 10 min, 5 attempts.
+- After the last attempt, or with an unreadable body, it goes through
+  `<prefix>.dead` to `<queue>.dead`.
+- Messages are persistent JSON, published with confirms; headers carry
+  `projectId`, `runId`, `itemId`.
+- `collector mq init` declares it all; `COLLECTOR_RABBIT` overrides the URI.
 
 Messages are signals and stay small: no page body ever travels over
 RabbitMQ, so there is no message size cap to manage (decided 2026-11-12).
@@ -443,44 +513,59 @@ Decided 2026-11-12: the plain `RabbitMQ.Client`, no MassTransit. Our code
 declares every exchange, queue, binding, dead-letter and priority setting
 itself, so the topology is ours to shape.
 
-## Solution layout (proposed)
+## Solution layout
+
+- Workers, Node and Api are created with their first real code, and join
+  the rig in the same change.
+- A new platform gets its own `Collector.Providers.<Platform>` project,
+  holding its harvest commands and adapters, and its own test project.
+- Each library has its own test project, so parallel work never shares a
+  build.
 
 ```
-Collector.sln
-src/Collector.Core/         Entity, domains, ids, message contracts, job and strategy schemas
-src/Collector.Harvesting/   fetchers (http, browser), per-provider harvest commands, pacing
-src/Collector.Lake/         lake library: write with retention modes, publish the signal, read, query
-src/Collector.Adapting/     per-provider × domain adapters and adapt commands, staging writes
-src/Collector.Storing/      store writer: staging reads, matching, upserts, derived fields
-src/Collector.Conducting/   conductor: runs, items, retry budget, decisions, schedule
-src/Collector.Data/         MongoDB collections, class maps, index setup
-src/Collector.Workers/      one host; the role it runs (conductor, harvester, adapter, store writer) is configuration
-src/Collector.Node/         the external node: pulls work over HTTPS, runs fetchers, uploads page bodies
-src/Collector.Api/          project-scoped reads, run progress, admin decisions, work API for nodes
-src/Collector.Cli/          run, decide, harvest, adapt, project export / archive / delete
-tests/Collector.Tests/      xUnit; harvest commands and adapters against saved page samples
+Collector.slnx
+rig/compose.yaml                    the local rig: MongoDB (single-node replica set) and RabbitMQ
+src/Collector.Core/                 Entity, domains, ids, message contracts, job and strategy schemas
+src/Collector.Data/                 MongoDB collections, class maps, index setup
+src/Collector.Harvesting/           polite and paced fetchers, robots, host budget, HarvestRunner
+src/Collector.Lake/                 lake library: write with retention modes, read, query
+src/Collector.Messaging/            RabbitMQ topology, publisher, consumer with retry and dead letters
+src/Collector.Adapting/             IAdapter, adapter catalog, AdaptRunner: lake → staging
+src/Collector.Storing/              store writer: staging reads, matching, merge upserts, derived fields
+src/Collector.Providers.Nbshop/     NBSHOP harvest commands, nbshop.shoes adapter
+src/Collector.Providers.SportM/     Sport M harvest commands, sportm.shoes adapter
+src/Collector.Conducting/           conductor: runs, items, retry budget, decisions (empty so far)
+src/Collector.Cli/                  dev CLI: db init, mq init, seed, harvest, adapt, apply, stats
+src/Collector.Workers/              not created yet: one host, its role is configuration
+src/Collector.Node/                 not created yet: the external node over HTTPS
+src/Collector.Api/                  not created yet: project-scoped reads, decisions, work API
+tests/Collector.Tests/              ids, BSON mapping
+tests/Collector.<Library>.Tests/    one per library and provider; Lake, Messaging, Storing need the rig
 ```
 
-Libraries: AngleSharp for HTML, `System.Text.Json` for JSON-LD,
-`IHttpClientFactory` with the standard resilience handler and a per-host
-rate limiter, Playwright for the browser mechanism, `MongoDB.Driver`,
-`RabbitMQ.Client`, xUnit.
+Libraries: AngleSharp for HTML, `System.Text.Json` for JSON-LD and
+messages, `MongoDB.Driver`, `RabbitMQ.Client`, xUnit. HTTP is our own
+`PoliteFetcher`. Playwright arrives with the browser mechanism (step 7).
 
 ## Build order
 
-1. Solution skeleton; `Core` with Entity, ids, message contracts, the job
-   and strategy schemas, the operations tree, the Shoes domain; `Data`
-   with the platform collections, Product, Listing, Category and their
-   indexes. RabbitMQ and MongoDB running locally in the compose rig.
-2. Harvesting: HTTP fetcher, pacing, the NBSHOP and Sport M commands
-   built from `docs/research/`; the lake library with the three retention
-   modes; `lake.item.stored`.
+1. **Done 2026-11-12.** Solution skeleton; `Core` with Entity, ids,
+   message contracts, the job and strategy schemas, the operations tree,
+   the Shoes domain; `Data` with the platform collections, Product,
+   Listing, Category and their indexes. RabbitMQ and MongoDB running
+   locally in the compose rig.
+2. **Done 2026-11-12.** Harvesting: HTTP fetcher, pacing, the NBSHOP and
+   Sport M commands built from `docs/research/`; the lake library with the
+   three retention modes; `lake.item.stored` from the harvester; the
+   RabbitMQ topology.
 3. Conductor: jobs and strategies as data, runs with commands, items and
    events, retry budget, waiting for decision; CLI `run` and `decide`.
-4. Adapters for Shoes on both platforms, producing Product and Listing
-   into staging; the store writer with `sku` matching and upserts;
-   `discover` and `details` jobs end to end; the CLI discovers by brand,
-   by listing path and by title text.
+   Not started: `Collector.Conducting` is empty.
+4. **In part, 2026-11-12.** Shoes adapters on both platforms into staging
+   and the store writer with brand + `sku` matching are built. `discover`
+   and `details` run end to end through the dev CLI, stage by stage,
+   without the conductor. Open: through the conductor; discovery by title
+   text.
 5. `stock` job with spread pacing; schedule; `live-check` job on the
    priority queue.
 6. API: project-scoped reads with the two dates, run progress, decisions.
@@ -489,11 +574,15 @@ rate limiter, Playwright for the browser mechanism, `MongoDB.Driver`,
 
 ## Open decisions (owner: you)
 
-- **Where it runs.** The first node needs an IP the sites allow (dsport.mk
-  and adidas.com blocked the cloud session). RabbitMQ and MongoDB on the
-  box, in WSL, or on the Proxmox VM.
-- **Lake bodies**: disk, S3-compatible store, or MongoDB GridFS. Disk
-  proposed to start.
+- **Where it runs, later.** For now everything runs on the box, in the
+  WSL compose rig, and the box is the first node. Moving to the Proxmox
+  VM stays open.
+- **Lake bodies**: disk for now (built). An S3-compatible store or GridFS
+  stays open for later.
+- **Unchanged pages and the conductor**: under changes-only an unchanged
+  page sends no `lake.item.stored`. A conductor that adapts from signals
+  needs those keys too: a signal with `changed: false`, or the keys on the
+  run item.
 - **Live-check policy** per project: who may trigger, how often.
 - **Refresh tiers**: `refreshInterval` exists on every listing from day
   one; the rule that sets it (popular daily, idle weekly) comes later.

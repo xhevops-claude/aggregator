@@ -42,7 +42,11 @@ Rules
 - Messages are signals: ids, keys, versions. Page bodies live in the
   lake, adapted entities in staging; neither rides on RabbitMQ.
 - Adapters only map a provider's raw shape to the common model. Matching
-  (same `sku` = same product) and upserts belong to the store writer.
+  (same brand + `sku` = same product, the provider's id kept as an alias)
+  and upserts belong to the store writer.
+- A new platform is its own `Collector.Providers.<Platform>` project with
+  its own test project.
+- Tests in the Lake, Messaging and Storing projects need the rig running.
 - A command reads its input from the store ("every listing with no
   details"), never from the previous command.
 - Harvesting is polite by design: the source's rate floor, retries with

@@ -100,3 +100,26 @@ https://code.claude.com/docs/en/claude-code-on-the-web
 
 Harvest and parse rules for the whole NBSHOP family:
 [nbshop-platform.md](nbshop-platform.md).
+
+## Findings 2026-11-12
+
+Live, polite, while building the NBSHOP harvest commands and Shoes adapter.
+
+- Product sitemap: 11,620 URLs (12,979 in August); 3,741 in shoe
+  categories. Counts per slug in [nbshop-platform.md](nbshop-platform.md).
+- `/mk/proizvodi/converse`: 4 pages of 24 tiles.
+  - Page 1 is all sneakers; page 4 is all clothes.
+  - Page 4 links back to page 3 and to no page 5.
+- Saved as test samples (gzipped, `tests/Collector.Providers.Nbshop.Tests/Samples/`):
+  - trimmed product sitemap, 17 URLs, 11 of them shoes;
+  - converse listing pages 1 and 4;
+  - `/mk/patiki/8733931-converse-chuck-taylor-all-star-equip`;
+  - `/mk/patiki/8566650-adidas-vs-pace-2-0`.
+
+| Page | Price | Old price | Sku | Model code | Sizes in stock |
+|---|---|---|---|---|---|
+| Converse Chuck Taylor All Star Equip | 3,995 | 7,990 | `A08556C` | none | 1 of 16 |
+| adidas VS PACE 2.0 | 2,794 | 3,288 | `HP6005` | `LSH59` | 8 of 24 |
+
+- Every available size carries its EAN-13 in `data-combination-code`.
+- adidas UK half sizes are written `7-`; the EU tab shows `41 1/3`.

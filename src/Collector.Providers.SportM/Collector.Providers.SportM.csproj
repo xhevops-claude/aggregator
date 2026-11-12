@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Collector.Core\Collector.Core.csproj" />
+    <ProjectReference Include="..\Collector.Harvesting\Collector.Harvesting.csproj" />
+    <ProjectReference Include="..\Collector.Adapting\Collector.Adapting.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="AngleSharp" />
+  </ItemGroup>
+</Project>

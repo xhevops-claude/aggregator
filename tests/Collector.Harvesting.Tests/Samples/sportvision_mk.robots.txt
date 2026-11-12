@@ -1,0 +1,14 @@
+# Crawlers Setup
+User-agent: *
+
+# Directories
+Disallow: /*?search=
+Disallow: /*?iframeView=1$
+
+# General Paths
+Disallow: /*.php$
+Disallow: /*?SID=
+Disallow: /*crawl=no
+Disallow: /*back_url=
+
+Sitemap: https://www.sportvision.mk/files/sitemap/sitemap.xml

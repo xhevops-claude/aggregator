@@ -1,0 +1,24 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Collector.Adapting/Collector.Adapting.csproj" />
+    <Project Path="src/Collector.Cli/Collector.Cli.csproj" />
+    <Project Path="src/Collector.Conducting/Collector.Conducting.csproj" />
+    <Project Path="src/Collector.Core/Collector.Core.csproj" />
+    <Project Path="src/Collector.Data/Collector.Data.csproj" />
+    <Project Path="src/Collector.Harvesting/Collector.Harvesting.csproj" />
+    <Project Path="src/Collector.Lake/Collector.Lake.csproj" />
+    <Project Path="src/Collector.Messaging/Collector.Messaging.csproj" />
+    <Project Path="src/Collector.Providers.Nbshop/Collector.Providers.Nbshop.csproj" />
+    <Project Path="src/Collector.Providers.SportM/Collector.Providers.SportM.csproj" />
+    <Project Path="src/Collector.Storing/Collector.Storing.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Collector.Harvesting.Tests/Collector.Harvesting.Tests.csproj" />
+    <Project Path="tests/Collector.Lake.Tests/Collector.Lake.Tests.csproj" />
+    <Project Path="tests/Collector.Messaging.Tests/Collector.Messaging.Tests.csproj" />
+    <Project Path="tests/Collector.Providers.Nbshop.Tests/Collector.Providers.Nbshop.Tests.csproj" />
+    <Project Path="tests/Collector.Providers.SportM.Tests/Collector.Providers.SportM.Tests.csproj" />
+    <Project Path="tests/Collector.Storing.Tests/Collector.Storing.Tests.csproj" />
+    <Project Path="tests/Collector.Tests/Collector.Tests.csproj" />
+  </Folder>
+</Solution>

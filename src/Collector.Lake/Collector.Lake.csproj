@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Collector.Core\Collector.Core.csproj" />
+    <ProjectReference Include="..\Collector.Data\Collector.Data.csproj" />
+  </ItemGroup>
+</Project>

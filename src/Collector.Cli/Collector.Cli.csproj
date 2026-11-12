@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Collector.Core\Collector.Core.csproj" />
+    <ProjectReference Include="..\Collector.Data\Collector.Data.csproj" />
+    <ProjectReference Include="..\Collector.Harvesting\Collector.Harvesting.csproj" />
+    <ProjectReference Include="..\Collector.Lake\Collector.Lake.csproj" />
+    <ProjectReference Include="..\Collector.Adapting\Collector.Adapting.csproj" />
+    <ProjectReference Include="..\Collector.Storing\Collector.Storing.csproj" />
+    <ProjectReference Include="..\Collector.Messaging\Collector.Messaging.csproj" />
+    <ProjectReference Include="..\Collector.Providers.Nbshop\Collector.Providers.Nbshop.csproj" />
+    <ProjectReference Include="..\Collector.Providers.SportM\Collector.Providers.SportM.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+</Project>
